@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { CheckCircle2, Loader2, MapPin, Pencil, RotateCcw, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Loader2, MapPin, Pencil, RotateCcw, XCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -14,8 +13,8 @@ const LOCATION_ID_KEY = "samurai_tax_location_id";
 const SHOW_CONNECT_NAV_KEY = "samurai_tax_show_connect_nav";
 
 export default function LocationPage() {
-  const router = useRouter();
   const [isChecking, setIsChecking] = useState(true);
+  const [isConnected, setIsConnected] = useState(false);
   const [merchantId, setMerchantId] = useState<string | null>(null);
   const [merchantName, setMerchantName] = useState<string | null>(null);
   const [locationIdInput, setLocationIdInput] = useState("");
@@ -47,9 +46,11 @@ export default function LocationPage() {
         );
         if (!active) {
           // Not connected — still show the page, just without merchant info
+          setIsConnected(false);
           setIsChecking(false);
           return;
         }
+        setIsConnected(true);
         setMerchantId(active.merchant_id);
 
         // Merchant display name
@@ -83,7 +84,8 @@ export default function LocationPage() {
         }
       } catch (error) {
         console.error(error);
-        router.replace("/account/connect");
+        // API error — show page without connection info rather than redirecting
+        setIsConnected(false);
         return;
       } finally {
         setIsChecking(false);
@@ -91,22 +93,24 @@ export default function LocationPage() {
     }
     checkConnection();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [router]);
+  }, []);
 
   async function handleSubmit() {
-    if (!locationIdInput || !merchantId) return;
+    if (!locationIdInput) return;
     try {
       localStorage.setItem(LOCATION_ID_KEY, locationIdInput);
-      // Look up shop name from location ID
+      // Look up shop name only when connected
       let name: string | null = null;
-      try {
-        const locations = await getSquareLocations(merchantId);
-        const match = locations.find(
-          (l) => (l.location_id ?? String(l.id ?? "")) === locationIdInput,
-        );
-        name = match?.name ?? match?.business_name ?? null;
-      } catch {
-        // non-critical
+      if (merchantId) {
+        try {
+          const locations = await getSquareLocations(merchantId);
+          const match = locations.find(
+            (l) => (l.location_id ?? String(l.id ?? "")) === locationIdInput,
+          );
+          name = match?.name ?? match?.business_name ?? null;
+        } catch {
+          // non-critical
+        }
       }
       setSavedLocationId(locationIdInput);
       setSavedLocationName(name);
@@ -166,8 +170,13 @@ export default function LocationPage() {
             ) : null}
           </CardHeader>
 
-          <CardContent className="space-y-4 p-0">
-            {saveStatus === "success" ? (
+          <CardContent className="space-y-4 p-0">            {/* Disconnected notice */}
+            {!isConnected ? (
+              <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-700">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>現在Squareに未接続です。ロケーシンIDを保存しておくことはできます。再接続後にそのまま適用されます。</span>
+              </div>
+            ) : null}            {saveStatus === "success" ? (
               <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-700">
                 <CheckCircle2 className="h-4 w-4 shrink-0" />
                 ロケーションIDを保存しました。
