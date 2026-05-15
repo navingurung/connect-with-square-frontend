@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { Suspense, useCallback, useEffect, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import Link from "next/link"
 
@@ -14,6 +14,32 @@ import type { SquareLocation, SquarePayment } from "@/lib/square-types"
 const LOCATION_ID_KEY = "samurai_tax_location_id"
 
 export default function TransactionsPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="min-h-screen bg-muted/30 px-6 py-8">
+          <div className="mx-auto max-w-7xl space-y-6">
+            <Card className="rounded-2xl border shadow-sm">
+              <CardHeader>
+                <Skeleton className="h-6 w-40" />
+                <Skeleton className="h-4 w-72" />
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <Skeleton className="h-24 w-full rounded-xl" />
+                <Skeleton className="h-24 w-full rounded-xl" />
+                <Skeleton className="h-24 w-full rounded-xl" />
+              </CardContent>
+            </Card>
+          </div>
+        </main>
+      }
+    >
+      <TransactionsContent />
+    </Suspense>
+  )
+}
+
+function TransactionsContent() {
   const searchParams = useSearchParams()
   const urlLocationId = searchParams.get("locationId") ?? undefined
 
