@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 
 import { Card } from "@/components/ui/card";
@@ -45,7 +45,9 @@ export default function ConnectPage() {
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-muted/30 px-4 py-8 sm:px-6">
-      <ConnectCard isConnected={!!connection} />
+      <Suspense fallback={null}>
+        <ConnectCard isConnected={!!connection} />
+      </Suspense>
     </main>
   );
 }

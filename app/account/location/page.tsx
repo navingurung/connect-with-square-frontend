@@ -2,13 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Loader2, MapPin, XCircle } from "lucide-react";
+import { CheckCircle2, Loader2, MapPin, Pencil, RotateCcw, XCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { getSquareConnections, getSquareMerchant } from "@/lib/square-api";
+import { getSquareConnections, getSquareLocations, getSquareMerchant } from "@/lib/square-api";
 
 const LOCATION_ID_KEY = "samurai_tax_location_id";
 const SHOW_CONNECT_NAV_KEY = "samurai_tax_show_connect_nav";
@@ -19,12 +19,17 @@ export default function LocationPage() {
   const [merchantId, setMerchantId] = useState<string | null>(null);
   const [merchantName, setMerchantName] = useState<string | null>(null);
   const [locationIdInput, setLocationIdInput] = useState("");
+  const [savedLocationId, setSavedLocationId] = useState<string | null>(null);
+  const [savedLocationName, setSavedLocationName] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"success" | "error" | null>(null);
   const [showConnectNav, setShowConnectNav] = useState(false);
 
   // Read stored preference on mount
   useEffect(() => {
     setShowConnectNav(localStorage.getItem(SHOW_CONNECT_NAV_KEY) === "true");
+    const saved = localStorage.getItem(LOCATION_ID_KEY);
+    if (saved) setSavedLocationId(saved);
   }, []);
 
   function handleConnectNavToggle(checked: boolean) {
@@ -62,6 +67,20 @@ export default function LocationPage() {
           }
         }
 
+        // Restore saved location name
+        const saved = localStorage.getItem(LOCATION_ID_KEY);
+        if (saved) {
+          setSavedLocationId(saved);
+          try {
+            const locations = await getSquareLocations(active.merchant_id);
+            const match = locations.find(
+              (l) => (l.location_id ?? String(l.id ?? "")) === saved,
+            );
+            setSavedLocationName(match?.name ?? match?.business_name ?? null);
+          } catch {
+            // non-critical
+          }
+        }
       } catch (error) {
         console.error(error);
         router.replace("/account/connect");
@@ -78,10 +97,33 @@ export default function LocationPage() {
     if (!locationIdInput || !merchantId) return;
     try {
       localStorage.setItem(LOCATION_ID_KEY, locationIdInput);
+      // Look up shop name from location ID
+      let name: string | null = null;
+      try {
+        const locations = await getSquareLocations(merchantId);
+        const match = locations.find(
+          (l) => (l.location_id ?? String(l.id ?? "")) === locationIdInput,
+        );
+        name = match?.name ?? match?.business_name ?? null;
+      } catch {
+        // non-critical
+      }
+      setSavedLocationId(locationIdInput);
+      setSavedLocationName(name);
+      setIsEditing(false);
       setSaveStatus("success");
     } catch {
       setSaveStatus("error");
     }
+  }
+
+  function handleReset() {
+    localStorage.removeItem(LOCATION_ID_KEY);
+    setSavedLocationId(null);
+    setSavedLocationName(null);
+    setLocationIdInput("");
+    setSaveStatus(null);
+    setIsEditing(false);
   }
 
   if (isChecking) {
@@ -137,33 +179,90 @@ export default function LocationPage() {
               </div>
             ) : null}
 
-            <div className="space-y-3">
-              <div className="space-y-1.5">
-                <label htmlFor="location-id-input" className="text-sm font-medium">
-                  ロケーションID
-                </label>
-                <Input
-                  id="location-id-input"
-                  value={locationIdInput}
-                  onChange={(e) => setLocationIdInput(e.target.value.trim())}
-                  placeholder="例: LXXXXXXXXXXXXXXXXX"
-                  className="rounded-lg"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && locationIdInput) {
-                      handleSubmit();
-                    }
-                  }}
-                />
+            {savedLocationId && !isEditing ? (
+              /* ── Locked state ── */
+              <div className="space-y-3">
+                    {savedLocationName ? (
+                      <p className="text-sm text-muted-foreground">
+                        店舗：<span className="font-semibold text-foreground">{savedLocationName}</span>
+                      </p>
+                    ) : null}
+                <div className="space-y-1.5">
+                  <p className="text-sm font-medium">ロケーションID</p>
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-10 flex-1 items-center rounded-lg border bg-muted/50 px-3 font-mono text-sm text-foreground">
+                      {savedLocationId}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-10 w-10 shrink-0 rounded-lg"
+                      onClick={() => {
+                        setLocationIdInput(savedLocationId ?? "");
+                        setSaveStatus(null);
+                        setIsEditing(true);
+                      }}
+                      aria-label="編集"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-10 w-10 shrink-0 rounded-lg text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      onClick={handleReset}
+                      aria-label="リセット"
+                    >
+                      <RotateCcw className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
               </div>
+            ) : (
+              /* ── Input form ── */
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <label htmlFor="location-id-input" className="text-sm font-medium">
+                    ロケーションID
+                  </label>
+                  <Input
+                    id="location-id-input"
+                    value={locationIdInput}
+                    onChange={(e) => setLocationIdInput(e.target.value.trim())}
+                    placeholder="例: LXXXXXXXXXXXXXXXXX"
+                    className="rounded-lg"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && locationIdInput) {
+                        handleSubmit();
+                      }
+                    }}
+                  />
+                </div>
 
-              <Button
-                className="h-11 w-full rounded-lg font-semibold"
-                disabled={!locationIdInput}
-                onClick={handleSubmit}
-              >
-                保存する
-              </Button>
-            </div>
+                <div className="flex gap-2">
+                  {isEditing ? (
+                    <Button
+                      variant="outline"
+                      className="h-11 flex-1 rounded-lg"
+                      onClick={() => {
+                        setIsEditing(false);
+                        setLocationIdInput("");
+                        setSaveStatus(null);
+                      }}
+                    >
+                      キャンセル
+                    </Button>
+                  ) : null}
+                  <Button
+                    className="h-11 flex-1 rounded-lg font-semibold"
+                    disabled={!locationIdInput}
+                    onClick={handleSubmit}
+                  >
+                    保存する
+                  </Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
